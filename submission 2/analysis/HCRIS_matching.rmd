@@ -1,0 +1,234 @@
+---
+output:
+  reprex::reprex_document:
+    venue: "gh"
+    advertise: FALSE
+    session_info: TRUE
+    style: TRUE
+    comment: "#;-)"
+    tidyverse_quiet: FALSE
+    std_out_err: TRUE
+knit: reprex::reprex_render
+---
+
+This template demonstrates many of the bells and whistles of the `reprex::reprex_document()` output format. The YAML sets many options to non-default values, such as using `#;-)` as the comment in front of output.
+
+## Code style
+
+Since `style` is `TRUE`, this difficult-to-read code (look at the `.Rmd` source file) will be restyled according to the Tidyverse style guide when it's rendered. Whitespace rationing is not in effect!
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, ggplot2, dplyr, lubridate, stringr, readxl, data.table, gdata)
+
+library(dplyr)
+library(pacman)
+library(cobalt)
+
+# install matching package
+library(Matching)
+
+# install packages that can use glm function
+
+```
+
+```{r}
+# import data/output/HCRIS_2012.csv
+final.hcris <- read.csv("data/output/HCRIS_Data_2012.csv")
+```
+
+
+
+```{r}
+lp.vars <- final.hcris %>%
+  dplyr::select(beds_1, beds_2, penalty, beds_3,
+         beds_4, price) %>%
+  filter(complete.cases(.))
+lp.covs <- lp.vars %>% dplyr::select(-c("penalty","price"))
+
+```
+
+# without adjustment
+
+```{r}
+love.plot(bal.tab(lp.covs,treat=lp.vars$penalty), colors="black", shapes="circle", threshold=0.1) + 
+  theme_bw() + theme(legend.position="none")
+```
+
+# single inverse variance weighting
+
+```{r}
+m.nn.var <- Matching::Match(Y=lp.vars$price,
+                             Tr=lp.vars$penalty,
+                             X=lp.covs,
+                             M=1,   #<<
+                             Weight=1,
+                             estimand="ATE")
+
+summary(m.nn.var)
+
+
+v.name=data.frame(new=c("Q1","Q2", "Q3",
+                   "Q4"))
+
+
+# save the plot in a variable
+var_plot <- love.plot(bal.tab(m.nn.var, covs = lp.covs, treat = lp.vars$penalty), 
+          threshold=0.1, 
+          var.names=v.name,
+          grid=FALSE, sample.names=c("Unmatched", "Matched"),
+          position="top", shapes=c("circle","triangle"),
+          colors=c("black","blue")) + 
+  theme_bw()
+
+# save the plot in the local directory
+ggsave("var_plot.png", var_plot, width=10, height=10, units="cm")
+
+
+```
+
+
+# single Mahalanobis distance matching
+
+```{r}
+m.nn.md <- Matching::Match(Y=lp.vars$price,
+                           Tr=lp.vars$penalty,
+                           X=lp.covs,
+                           M=1,
+                           Weight=2,
+                           estimand="ATE")  
+
+summary(m.nn.md)
+
+# save the plot in a variable
+md_plot <- love.plot(bal.tab(m.nn.md, covs = lp.covs, treat = lp.vars$penalty), 
+          threshold=0.1, 
+          var.names=v.name,
+          grid=FALSE, sample.names=c("Unmatched", "Matched"),
+          position="top", shapes=c("circle","triangle"),
+          colors=c("black","blue")) + 
+  theme_bw()
+
+# save the plot in the local directory
+ggsave("md_plot.png", md_plot, width=10, height=10, units="cm")
+
+
+```
+
+# propensity score matching
+
+```{r}
+logit.model <- glm(penalty ~ beds_1 + beds_2 + beds_3 + beds_4, family=binomial, data=lp.vars)
+ps <- fitted(logit.model)
+m.nn.ps <- Matching::Match(Y=lp.vars$price,
+                           Tr=lp.vars$penalty,
+                           X=ps,
+                           M=1,
+                           estimand="ATE")
+
+# show the matching_est 
+
+summary(m.nn.ps)
+
+
+# save the plot in a variable
+ps_plot <- love.plot(bal.tab(m.nn.ps, covs = lp.covs, treat = lp.vars$penalty), 
+          threshold=0.1, 
+          var.names=v.name,
+          grid=FALSE, sample.names=c("Unmatched", "Matched"),
+          position="top", shapes=c("circle","triangle"),
+          colors=c("black","blue")) + 
+  theme_bw()
+
+# save the plot in the local directory
+ggsave("ps_plot.png", ps_plot, width=10, height=10, units="cm")
+
+```
+
+# linear regression (two step)
+
+```{r}
+reg1.dat <- lp.vars %>% filter(penalty==1, complete.cases(.))
+reg1 <- lm(price ~ beds_1 + beds_2 + beds_3 + beds_4, data=reg1.dat)
+
+reg0.dat <- lp.vars %>% filter(penalty==0, complete.cases(.))
+reg0 <- lm(price ~ beds_1 + beds_2 + beds_3 + beds_4, data=reg0.dat)
+pred1 <- predict(reg1,new=lp.vars)
+pred0 <- predict(reg0,new=lp.vars)
+
+mean(pred1-pred0)
+```
+
+
+```{r}
+# another linear regression with penalty and beds_1 to beds_4 as covariates and include the interaction term bewteen penalty and (x_i-x_bar) for each beds
+reg2.dat <- lp.vars %>% filter(complete.cases(.))
+
+# in reg2.dat, create four new variables, var_1, var_2, var_3, var_4, which are the difference between beds_1 to beds_4 and their mean
+reg2.dat$var_1 <- reg2.dat$beds_1 - mean(reg2.dat$beds_1)
+reg2.dat$var_2 <- reg2.dat$beds_2 - mean(reg2.dat$beds_2)
+reg2.dat$var_3 <- reg2.dat$beds_3 - mean(reg2.dat$beds_3)
+reg2.dat$var_4 <- reg2.dat$beds_4 - mean(reg2.dat$beds_4)
+
+
+reg2 <- lm(price ~ beds_1 + beds_2 + beds_3 + beds_4 + penalty + var_1:penalty + var_2:penalty + var_3:penalty + var_4:penalty, data=reg2.dat)
+
+summary(reg2)
+
+
+
+# extract the se of the coefficient of penalty
+se.penalty <- summary(reg2)$coefficients[5,2]
+se.penalty
+
+
+library(tidyverse)
+library(broom)
+
+reg2_sum <- tidy(reg2)
+reg2_sum
+
+# class of reg2_sum
+class(reg2_sum)
+
+```
+
+
+
+# in one table
+```{r}
+summary(m.nn.var)
+summary(m.nn.md)
+summary(m.nn.ps)
+mean(pred1-pred0)
+
+
+# create a table showing the ATE for each method
+sum_table <- data.frame("Method" = c("Single Inverse Variance Weighting", "Single Mahalanobis Distance Matching", "Propensity Score Matching", "Linear Regression (Two Step)"),
+                    "ATE" = c(m.nn.var$est
+                                ,m.nn.md$est
+                                ,m.nn.ps$est
+                                ,mean(pred1-pred0)),
+                    "Standard Error" = c(m.nn.var$se
+                                         ,m.nn.md$se
+                                         ,m.nn.ps$se
+                                         ,se.penalty))
+
+
+sum_table
+
+```
+
+# save in the workspace (python&R)
+```{r}
+save(sum_table, reg2_sum, file="matching_est.RData")
+
+```
+
+# quesiton 8, 9, 10
+
+# qmd file
+
+# transfer to econ470_hwk2 file
+
+
