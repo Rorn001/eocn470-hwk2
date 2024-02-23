@@ -1,0 +1,201 @@
+---
+title: "huang-r-hwk2-3"
+author: Ron Huang
+data: \today{}
+
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    colorlinks: true
+    highlight-style: atom-one-dark
+    code-hide: true
+
+echo: false
+warning: false
+---
+
+# git@github.com:Rorn001/eocn470-hwk2.git {.unnumbered}
+
+# Summarize the data
+
+## How many hospitals filed more than one report in the same year? Show your answer as a line graph of the number of hospitals over time.
+
+```{python}
+import pickle
+
+with open('hwk2_Q1-6.pkl', 'rb') as f:
+   q1_fig, q2_allyear, q2_peryear, q3_fig, q4_fig, q5_table, q6_table, sum_table, reg2_sum = pickle.load(f)
+
+```
+
+```{python}
+import matplotlib.pyplot as plt
+q1_fig
+```
+
+\newpage
+## After removing/combining multiple reports, how many unique hospital IDs (Medicare provider numbers) exist in the data?
+
+```{python}
+# question: removing or combining? how to combine the reports?
+
+f"Unqiue number of hospitals across all years is {q2_allyear}"
+
+```
+
+```{python}
+f"Unqiue number of hospitals per year is:"
+
+```
+
+```{python}
+q2_peryear
+```
+
+
+\newpage
+## What is the distribution of total charges (tot_charges in the data) in each year? Show your results with a “violin” plot, with charges on the y-axis and years on the x-axis. 
+
+```{python}
+# Question: threshold for outliers?
+
+q3_fig
+
+```
+
+\newpage
+## What is the distribution of estimated prices in each year? Again present your results with a violin plot, and recall our formula for estimating prices from class.
+
+```{python}
+
+q4_fig
+
+```
+
+\newpage
+# Estimate ATEs
+
+## Calculate the average price among penalized versus non-penalized hospitals.
+
+```{python}
+
+q5_table
+
+```
+
+\newpage
+## Split hospitals into quartiles based on bed size. To do this, create 4 new indicator variables, where each variable is set to 1 if the hospital’s bed size falls into the relevant quartile. Provide a table of the average price among treated/control groups for each quartile.
+
+```{python}
+
+# Question: do we split it into penalized and non-penalized hospitals and then define the quartiles variables, or do we define the quartiles variables first and then split it into penalized and non-penalized hospitals?
+
+q6_table
+
+```
+
+\newpage
+## Find the average treatment effect using each of the following estimators, and present your results in a single table
+(1) Nearest neighbor matching (1-to-1) with inverse variance distance based on quartiles of bed size
+
+
+Estimate...  193.83 \
+AI SE......  236.08 \
+T-stat.....  0.82103 \
+p.val......  0.41163 \
+
+Original number of observations..............  2733 \
+Original number of treated obs...............  704 \
+Matched number of observations...............  2733 \
+Matched number of observations  (unweighted).  710030 \
+
+```{python}
+# Question: no matching package in python. cannot save the plot in Rdata and read it in python.
+
+from IPython.display import Image
+Image(filename='var_plot.png')
+```
+
+\newpage
+(2) Nearest neighbor matching (1-to-1) with Mahalanobis distance based on quartiles of bed size
+
+Estimate...  193.83 \
+AI SE......  236.08 \
+T-stat.....  0.82103 \
+p.val......  0.41163 \
+
+Original number of observations..............  2733 \
+Original number of treated obs...............  704 \
+Matched number of observations...............  2733 \
+Matched number of observations  (unweighted).  710030 \
+
+```{python}
+
+# question: Summary.Matching cannot be converted to dataframe as the summary of lm or glm models by using tidy() function. is there a way to save it?
+
+Image(filename='md_plot.png')
+```
+
+\newpage
+(3). Inverse propensity weighting, where the propensity scores are based on quartiles of bed size
+
+Estimate...  193.83 \
+AI SE......  236.08 \
+T-stat.....  0.82103 \
+p.val......  0.41163 \
+
+
+Original number of observations..............  2733 \
+Original number of treated obs...............  704 \
+Matched number of observations...............  2733 \
+Matched number of observations  (unweighted).  710030 \
+
+```{python}
+# question: estimates are identical, is this what we should expect?
+
+Image(filename='ps_plot.png')
+```
+
+\newpage
+(4). Simple linear regression, adjusting for quartiles of bed size using dummy variables and appropriate interactions as discussed in class
+
+$$
+Y_i = \delta D_i + \beta \Sigma_{k=1}^k X_{ik} + \gamma D_i \Sigma_{k=1}^k (X_{ik} - \bar{X}_k) + \epsilon_i
+$$
+
+
+```{python}
+
+reg2_sum
+
+```
+
+
+
+
+\newpage
+Summary table
+
+```{python}
+
+sum_table
+
+```
+
+\newpage
+## With these different treatment effect estimators, are the results similar, identical, very different?
+
+The results are identical across all estimators. The average treatment effect is 193.83, and they are al statistically insignificant. This might be because the covariates we used are the dummies for the bed size quartiles so that all four methods create the subclasses and do the matching identically. Namely, each hospital is only compared with another hospital in the same quartile no matter what matching model we use. 
+
+
+\newpage
+## Do you think you’ve estimated a causal effect of the penalty? Why or why not? (just a couple of sentences)
+
+Since we rely on the assumption of selection on observables, it is hard to determine whether we have controlled for all possible confounders that could affect the penalty and the price simultaneously. Suppose the assumption holds, we only consider four quartiles of bed size as covariates, while some other omitted variables may still exist. Therefore, the ATEs here might only partially explain the causal effect of the penalty.
+
+
+\newpage
+## Briefly describe your experience working with these data (just a few sentences). Tell me one thing you learned and one thing that really aggravated or surprised you.
+
+This is a way smaller dataset than the previous one, so it is easier to handle it. However, one thing is that the matching package is only available in R, so I have to use both R and python for different questions. It is hard to read both languages in .qmd file at the same time. For some tables, I can save them in dataframe and read them in python so that I can make sure that there aren't multiple languaes when compiling Quarto, but the regression summary for matching cannot be saved using tidy() function as lm or glm models. Currently, I haven't figure out how to do that so I can only copy and past the results, which is not very effcient.
